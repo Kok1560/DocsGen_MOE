@@ -1,0 +1,300 @@
+﻿@page "/editor"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@implements IDisposable
+@inject TemplateService TemplateSvc
+@inject DocxEngine Engine
+@inject PdfConverter Pdf
+@inject DocumentService Documents
+@inject AuthenticationStateProvider AuthState
+@inject IJSRuntime JS
+@inject ILogger<Editor> Logger
+
+<PageTitle>Editor</PageTitle>
+
+@if (error is not null)
+{
+    <div class="alert alert-danger">@error</div>
+    <a href="templates">&larr; Back to templates</a>
+}
+else
+{
+    <div class="d-flex align-items-center mb-3">
+        <a href="templates" class="btn btn-outline-secondary btn-sm me-3">&larr; Templates</a>
+        <h1 class="h4 mb-0">@templateName</h1>
+    </div>
+
+    <div class="row g-3">
+
+        @* ===== LEFT: the form ===== *@
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-body">
+
+                    @if (fields.Count == 0)
+                    {
+                        <p class="text-muted">This template has no fields.</p>
+                    }
+
+                    @foreach (var name in fields)
+                    {
+                        var key = name;   // copy, so each input binds to its own field
+                                          <div class="mb-3">
+                                              <label class="form-label">@key</label>
+                                              <input class="form-control"
+                                                     @bind="values[key]"
+                                                     @bind:event="oninput"
+                                                     @bind:after="OnFieldChanged" />
+                                          </div>
+                    }
+
+                    <hr />
+
+                    <div class="mb-3">
+                        <label class="form-label">File name</label>
+                        <input class="form-control" @bind="fileName" />
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary" @onclick="DownloadWordAsync" disabled="@busy">Download Word</button>
+                        <button class="btn btn-outline-primary" @onclick="DownloadPdfAsync" disabled="@busy">Download PDF</button>
+                        <button class="btn btn-success" @onclick="SaveAsync" disabled="@busy">Save to My documents</button>
+                    </div>
+
+                    @if (busy)
+                    {
+                        <p class="text-muted small mt-3 mb-0">
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span> Working...
+                        </p>
+                    }
+
+                    @if (actionError is not null)
+                    {
+                        <div class="alert alert-danger mt-3 mb-0">@actionError</div>
+                    }
+
+                    @if (message is not null)
+                    {
+                        <div class="alert alert-success mt-3 mb-0">
+                            @message <a href="documents">Open My documents</a>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* ===== RIGHT: the live preview ===== *@
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex align-items-center">
+                    <span class="fw-semibold me-auto">Preview</span>
+
+                    @if (previewLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-label="Updating preview"></span>
+                        <span class="text-muted small me-3">Updating...</span>
+                    }
+
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => QueuePreview(0)">Refresh</button>
+                </div>
+
+                @if (previewError is not null)
+                {
+                    <div class="alert alert-danger m-3 mb-0">@previewError</div>
+                }
+
+                <iframe @ref="previewFrame" title="Document preview"
+                        style="width:100%; height:75vh; min-height:500px; border:0;"></iframe>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private const int DebounceMs = 600;
+
+    [SupplyParameterFromQuery(Name = "template")]
+    public string? Template { get; set; }
+
+    private string? templatePath;
+    private string templateName = "";
+    private string fileName = "";
+    private int userId;
+    private List<string> fields = [];
+    private Dictionary<string, string> values = new(StringComparer.OrdinalIgnoreCase);
+
+    private string? error;
+    private string? actionError;
+    private string? message;
+    private bool busy;
+
+    // Preview state
+    private ElementReference previewFrame;
+    private CancellationTokenSource? previewCts;
+    private bool previewLoading;
+    private string? previewError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        userId = state.User.GetUserId();
+
+        // Never trust the name from the address bar: GetPath validates it
+        templatePath = Template is null ? null : TemplateSvc.GetPath(Template);
+        if (templatePath is null)
+        {
+            error = "Template not found.";
+            return;
+        }
+
+        try
+        {
+            templateName = Path.GetFileNameWithoutExtension(templatePath);
+            fileName = templateName;
+            fields = Engine.DetectFields(templatePath).ToList();
+            foreach (var f in fields) values[f] = "";
+        }
+        catch
+        {
+            error = "This template could not be read.";
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // First preview as soon as the page is interactive (JavaScript is not available before that)
+        if (firstRender && error is null) QueuePreview(0);
+    }
+
+    // ---------- Live preview ----------
+
+    private void OnFieldChanged() => QueuePreview(DebounceMs);
+
+    /// <summary>Cancels any pending preview and schedules a new one after the delay.</summary>
+    private void QueuePreview(int delayMs)
+    {
+        previewCts?.Cancel();   // the old request will notice and stop
+        var cts = previewCts = new CancellationTokenSource();
+        _ = RunPreviewAsync(delayMs, cts.Token);
+    }
+
+    private async Task RunPreviewAsync(int delayMs, CancellationToken ct)
+    {
+        try
+        {
+            if (delayMs > 0) await Task.Delay(delayMs, ct);   // the debounce
+            await RefreshPreviewAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // a newer edit replaced this request: nothing to do
+        }
+    }
+
+    private async Task RefreshPreviewAsync(CancellationToken ct)
+    {
+        previewLoading = true;
+        previewError = null;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var docx = Engine.Fill(templatePath!, values);
+            var pdf = await Pdf.ConvertAsync(docx, ct);
+
+            ct.ThrowIfCancellationRequested();   // a newer edit arrived while converting: drop this result
+
+            using var stream = new MemoryStream(pdf);
+            using var streamRef = new DotNetStreamReference(stream);
+            await JS.InvokeVoidAsync("setPdfPreview", ct, previewFrame, streamRef);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException)
+        {
+            // the browser tab was closed
+        }
+        catch (PdfConversionException ex)
+        {
+            previewError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Preview failed");
+            previewError = "The preview could not be created.";
+        }
+        finally
+        {
+            // If this request was cancelled, a newer one is already running and owns the spinner
+            if (!ct.IsCancellationRequested)
+            {
+                previewLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    // ---------- Buttons ----------
+
+    private Task DownloadWordAsync() => RunAsync(async () =>
+    {
+        var docx = Engine.Fill(templatePath!, Snapshot());
+        await SendToBrowserAsync(docx, FileNames.Sanitize(fileName) + ".docx");
+    });
+
+    private Task DownloadPdfAsync() => RunAsync(async () =>
+    {
+        var docx = Engine.Fill(templatePath!, Snapshot());
+        var pdf = await Pdf.ConvertAsync(docx);
+        await SendToBrowserAsync(pdf, FileNames.Sanitize(fileName) + ".pdf");
+    });
+
+    private Task SaveAsync() => RunAsync(async () =>
+    {
+        var snapshot = Snapshot();
+        var docx = Engine.Fill(templatePath!, snapshot);
+        var pdf = await Pdf.ConvertAsync(docx);
+        await Documents.SaveAsync(userId, fileName, templateName, docx, pdf, snapshot);
+        message = "Document saved.";
+    });
+
+    /// <summary>Runs a button action with a busy flag and friendly error handling.</summary>
+    private async Task RunAsync(Func<Task> action)
+    {
+        if (busy) return;
+        busy = true;
+        actionError = null;
+        message = null;
+        try
+        {
+            await action();
+        }
+        catch (PdfConversionException ex)
+        {
+            actionError = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Document action failed");
+            actionError = "Something went wrong. Please try again.";
+        }
+        finally
+        {
+            busy = false;
+        }
+    }
+
+    // A copy of the values, so typing during a slow conversion cannot change what is generated
+    private Dictionary<string, string> Snapshot() => new(values, StringComparer.OrdinalIgnoreCase);
+
+    private async Task SendToBrowserAsync(byte[] bytes, string downloadName)
+    {
+        using var stream = new MemoryStream(bytes);
+        using var streamRef = new DotNetStreamReference(stream);
+        await JS.InvokeVoidAsync("downloadFileFromStream", downloadName, streamRef);
+    }
+
+    public void Dispose() => previewCts?.Cancel();   // page closed: stop pending work
+}

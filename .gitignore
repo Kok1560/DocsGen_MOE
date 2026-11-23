@@ -1,0 +1,12 @@
+# Visual Studio & .NET build/cache artifacts
+.vs/
+[Bb]in/
+[Oo]bj/
+*.user
+*.userosscache
+*.suo
+*.dbmdl
+*.jfm
+*.pfx
+*.publishxml
+*.published.xml

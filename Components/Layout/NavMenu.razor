@@ -1,0 +1,45 @@
+﻿<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="">DocGen</a>
+    </div>
+</div>
+
+<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+    <nav class="nav flex-column">
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+            </NavLink>
+        </div>
+
+        @* <div class="nav-item px-3">
+            <NavLink class="nav-link" href="counter">
+                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
+            </NavLink>
+        </div> *@
+
+        @* <div class="nav-item px-3">
+            <NavLink class="nav-link" href="weather">
+                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
+            </NavLink>
+            <i class="bi bi-files"></i>
+        </div> *@
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link d-flex align-items-center" href="templates">
+                <span class="bi bi-file-earmark-pdf-fill fs-4 d-flex align-items-center justify-content-center" aria-hidden="true"></span>
+                Templates
+            </NavLink>
+        </div>
+
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="documents">
+                <span class="bi bi-folder-fill fs-4 d-flex align-items-center justify-content-center" aria-hidden="true"></span>
+                My documents
+            </NavLink>
+        </div>
+    </nav>
+</div>
+

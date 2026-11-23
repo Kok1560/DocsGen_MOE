@@ -1,0 +1,62 @@
+﻿@page "/login"
+@using System.ComponentModel.DataAnnotations
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<PageTitle>Log in</PageTitle>
+
+<div class="mx-auto mt-4" style="max-width: 380px;">
+    <h1 class="h3 mb-3">Log in</h1>
+
+    <EditForm Model="Input" FormName="login" OnValidSubmit="LoginAsync" method="post">
+        <DataAnnotationsValidator />
+
+        @if (error is not null)
+        {
+            <div class="alert alert-danger">@error</div>
+        }
+
+        <div class="mb-3">
+            <label class="form-label">Username</label>
+            <InputText class="form-control" @bind-Value="Input.Username" />
+            <ValidationMessage For="() => Input.Username" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Password</label>
+            <InputText type="password" class="form-control" @bind-Value="Input.Password" />
+            <ValidationMessage For="() => Input.Password" />
+        </div>
+
+        <button type="submit" class="btn btn-primary w-100">Log in</button>
+    </EditForm>
+
+    <p class="mt-3">No account? <a href="register">Register</a></p>
+</div>
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm] private LoginModel Input { get; set; } = new();
+
+    private string? error;
+
+    private async Task LoginAsync()
+    {
+        var user = await Auth.ValidateAsync(Input.Username, Input.Password);
+        if (user is null)
+        {
+            error = "Wrong username or password.";
+            return;
+        }
+
+        await HttpContext.SignInUserAsync(user);
+        Nav.NavigateTo("/");
+    }
+
+    private class LoginModel
+    {
+        [Required] public string Username { get; set; } = "";
+        [Required] public string Password { get; set; } = "";
+    }
+}
