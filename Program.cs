@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);   // For LocalHost
 
@@ -135,6 +136,57 @@ app.MapGet("/view/{id:guid}", async (Guid id, HttpContext http, ClaimsPrincipal 
 
     // No file name given, so the browser shows the PDF instead of downloading it
     return Results.File(file.Content, file.ContentType);
+}).RequireAuthorization();
+
+app.MapPost("/copy/{id:guid}", async (Guid id, HttpContext http, ClaimsPrincipal user, DocumentService documents) =>
+{
+    // Only works for the person sitting at this computer
+    if (!OperatingSystem.IsWindows()
+        || http.Connection.RemoteIpAddress is not { } ip
+        || !System.Net.IPAddress.IsLoopback(ip))
+        return Results.StatusCode(403);
+
+    // Returns null for documents that don't exist AND for other people's documents
+    var file = await documents.GetFileAsync(user.GetUserId(), id, pdf: true);
+    if (file is null) return Results.NotFound();
+
+    // One temporary file at a time: the previous copy is replaced
+    var folder = Path.Combine(Path.GetTempPath(), "docgen-clipboard");
+    try { if (Directory.Exists(folder)) Directory.Delete(folder, true); } catch { }
+    Directory.CreateDirectory(folder);
+
+    var path = Path.Combine(folder, file.FileName);
+    await File.WriteAllBytesAsync(path, file.Content);
+
+    // Windows PowerShell puts the file on the clipboard, like Ctrl+C on a file in Explorer
+    var psi = new ProcessStartInfo
+    {
+        FileName = "powershell.exe",
+        UseShellExecute = false,
+        CreateNoWindow = true
+    };
+    psi.ArgumentList.Add("-NoProfile");
+    psi.ArgumentList.Add("-STA");
+    psi.ArgumentList.Add("-NonInteractive");
+    psi.ArgumentList.Add("-Command");
+    psi.ArgumentList.Add("Set-Clipboard -LiteralPath $env:DOCGEN_CLIP");
+    psi.Environment["DOCGEN_CLIP"] = path;   // passed this way so odd characters in the name can't break the command
+
+    using var process = Process.Start(psi);
+    if (process is null) return Results.StatusCode(500);
+
+    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+    try
+    {
+        await process.WaitForExitAsync(timeout.Token);
+    }
+    catch (OperationCanceledException)
+    {
+        try { process.Kill(entireProcessTree: true); } catch { }
+        return Results.StatusCode(500);
+    }
+
+    return process.ExitCode == 0 ? Results.Ok() : Results.StatusCode(500);
 }).RequireAuthorization();
 
 app.Run();

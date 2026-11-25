@@ -1,4 +1,4 @@
-﻿// Lets a Blazor page send a file to the browser as a download
+// Lets a Blazor page send a file to the browser as a download
 window.downloadFileFromStream = async (fileName, contentStreamReference) => {
     const arrayBuffer = await contentStreamReference.arrayBuffer();
     const blob = new Blob([arrayBuffer]);
@@ -49,4 +49,83 @@ window.copyText = async (text) => {
     try { ok = document.execCommand("copy"); } catch { }
     box.remove();
     return ok;
+};
+
+// Editor draft: kept in this browser tab so a language switch (a page reload) does not lose the typing.
+// It is only given back when the language button was just clicked (flag set for a few seconds).
+window.draft = {
+    save: (key, json) => {
+        try { sessionStorage.setItem(key, json); } catch { }
+    },
+    loadIfRestoring: (key) => {
+        try {
+            const stamp = Number(sessionStorage.getItem("docgen.restore") || 0);
+            sessionStorage.removeItem("docgen.restore");
+            if (!stamp || Date.now() - stamp > 15000) return null;
+            return sessionStorage.getItem(key);
+        } catch { return null; }
+    }
+};
+
+// Sends a saved document's PDF through the system share window (WhatsApp, email, ...).
+// target = "whatsapp": if the browser can't share files, download the PDF and open WhatsApp.
+window.shareDocumentPdf = async (button, target) => {
+    const id = button.dataset.id;
+    const name = button.dataset.name || "document";
+    const fileName = name + ".pdf";
+
+    button.disabled = true;
+    try {
+        const response = await fetch(`/download/${id}/pdf`, { credentials: "same-origin" });
+        if (!response.ok) throw new Error("PDF not available");
+
+        const blob = await response.blob();
+        const file = new File([blob], fileName, { type: "application/pdf" });
+
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: name });
+            return;
+        }
+
+        // This browser can't share files: save the PDF so it can be attached by hand
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+        if (target === "whatsapp") {
+            window.open("https://wa.me/?text=" + encodeURIComponent(name), "_blank", "noopener");
+        } else {
+            alert("The PDF was downloaded. Attach it in WhatsApp or your email to send it.");
+        }
+    } catch (e) {
+        if (e && e.name === "AbortError") return;   // the person closed the share window: not an error
+        alert("Could not prepare the PDF. Please try again.");
+    } finally {
+        button.disabled = false;
+    }
+};
+
+// Asks the app (running on this same computer) to put the document's PDF on the Windows clipboard
+window.copyDocumentPdf = async (button) => {
+    const original = button.innerHTML;
+    button.disabled = true;
+
+    let message;
+    try {
+        const response = await fetch(`/copy/${button.dataset.id}`, { method: "POST", credentials: "same-origin" });
+        message = response.ok ? button.dataset.ok : button.dataset.fail;
+    } catch {
+        message = button.dataset.fail;
+    }
+
+    button.textContent = message;
+    setTimeout(() => {
+        button.innerHTML = original;
+        button.disabled = false;
+    }, 2000);
 };

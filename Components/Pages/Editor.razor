@@ -10,46 +10,53 @@
 @inject IJSRuntime JS
 @inject ILogger<Editor> Logger
 
-<PageTitle>Editor</PageTitle>
+<PageTitle>@L["editor.title"]</PageTitle>
 
 @if (error is not null)
 {
     <div class="alert alert-danger">@error</div>
-    <a href="templates">&larr; Back to templates</a>
+    <a href="templates"><i class="bi bi-arrow-left icon-flip" aria-hidden="true"></i> @L["editor.backfull"]</a>
 }
 else
 {
-    <div class="d-flex align-items-center mb-3">
-        <a href="templates" class="btn btn-outline-secondary btn-sm me-3">&larr; Templates</a>
-        <h1 class="h4 mb-0">@templateName</h1>
+    <div class="d-flex align-items-center mb-3 flex-wrap gap-2">
+        <a href="templates" class="btn btn-outline-primary btn-sm me-2">
+            <i class="bi bi-arrow-left icon-flip" aria-hidden="true"></i> @L["editor.back"]
+        </a>
+        <h1 class="page-title mb-0">@templateName</h1>
     </div>
 
     <div class="row g-3">
 
-        @* ===== LEFT: the form ===== *@
+        @* ===== The form ===== *@
         <div class="col-lg-4">
             <div class="card">
+                <div class="card-header card-header-gov">
+                    <i class="bi bi-ui-checks-grid" aria-hidden="true"></i> @L["editor.data"]
+                </div>
                 <div class="card-body">
 
                     @if (fields.Count == 0)
                     {
-                        <p class="text-muted">This template has no fields.</p>
+                        <p class="text-muted">@L["editor.nofields"]</p>
                     }
 
                     @foreach (var name in fields)
                     {
                         var key = name;   // copy, so each input binds to its own field
-                                          <div class="mb-3">
-                                              <label class="form-label">@key</label>
-                                              <input class="form-control"
-                                                     @bind="values[key]"
-                                                     @bind:event="oninput"
-                                                     @bind:after="() => OnFieldChanged(key)" />
+                        <div class="mb-3">
+                            <label class="form-label">@key</label>
+                            <input class="form-control" dir="auto"
+                                   @bind="values[key]"
+                                   @bind:event="oninput"
+                                   @bind:after="() => OnFieldChanged(key)" />
 
                             @if (duplicateWarning is not null
-                                                && key.Equals(DocumentService.PersonNameField, StringComparison.OrdinalIgnoreCase))
+                                && key.Equals(DocumentService.PersonNameField, StringComparison.OrdinalIgnoreCase))
                             {
-                                <div class="alert alert-warning py-1 px-2 small mt-1 mb-0">@duplicateWarning</div>
+                                <div class="alert alert-warning py-1 px-2 small mt-1 mb-0">
+                                    <i class="bi bi-exclamation-triangle-fill" aria-hidden="true"></i> @duplicateWarning
+                                </div>
                             }
                         </div>
                     }
@@ -57,32 +64,36 @@ else
                     <hr />
 
                     <div class="mb-1">
-                        <label class="form-label">Document name</label>
-                        <input class="form-control" @bind="fileName" @bind:after="RenameAsync" />
+                        <label class="form-label">@L["editor.docname"]</label>
+                        <input class="form-control" dir="auto" @bind="fileName" @bind:after="RenameAsync" />
                     </div>
 
                     @if (saveError is not null)
                     {
-                        <p class="text-danger small mb-3">@saveError</p>
+                        <p class="text-danger small mb-3"><i class="bi bi-x-circle-fill" aria-hidden="true"></i> @saveError</p>
                     }
                     else if (lastSaved is not null)
                     {
-                        <p class="text-success small mb-3">Saved in My documents as "@lastSaved.Name"</p>
+                        <p class="text-success small mb-3"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> @L.Format("editor.savedas", lastSaved.Name)</p>
                     }
                     else
                     {
-                        <p class="text-muted small mb-3">It will be saved in My documents automatically.</p>
+                        <p class="text-muted small mb-3"><i class="bi bi-cloud-arrow-up" aria-hidden="true"></i> @L["editor.autosave"]</p>
                     }
 
                     <div class="d-grid gap-2">
-                        <button class="btn btn-primary" @onclick="() => DownloadAsync(false)" disabled="@busy">Download Word</button>
-                        <button class="btn btn-outline-primary" @onclick="() => DownloadAsync(true)" disabled="@busy">Download PDF</button>
+                        <button class="btn btn-primary" @onclick="() => DownloadAsync(false)" disabled="@busy">
+                            <i class="bi bi-file-earmark-word" aria-hidden="true"></i> @L["editor.word"]
+                        </button>
+                        <button class="btn btn-outline-primary" @onclick="() => DownloadAsync(true)" disabled="@busy">
+                            <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> @L["editor.pdf"]
+                        </button>
                     </div>
 
                     @if (busy)
                     {
                         <p class="text-muted small mt-3 mb-0">
-                            <span class="spinner-border spinner-border-sm me-1" role="status"></span> Working...
+                            <span class="spinner-border spinner-border-sm me-1" role="status"></span> @L["editor.working"]
                         </p>
                     }
 
@@ -94,26 +105,28 @@ else
                     @if (message is not null)
                     {
                         <div class="alert alert-success mt-3 mb-0">
-                            @message <a href="documents">Open My documents</a>
+                            @message <a href="documents">@L["editor.open"]</a>
                         </div>
                     }
                 </div>
             </div>
         </div>
 
-        @* ===== RIGHT: the live preview ===== *@
+        @* ===== The live preview ===== *@
         <div class="col-lg-8">
             <div class="card">
-                <div class="card-header d-flex align-items-center">
-                    <span class="fw-semibold me-auto">Preview</span>
+                <div class="card-header card-header-gov d-flex align-items-center">
+                    <span class="fw-semibold me-auto"><i class="bi bi-eye-fill" aria-hidden="true"></i> @L["editor.preview"]</span>
 
                     @if (previewLoading)
                     {
-                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-label="Updating preview"></span>
-                        <span class="text-muted small me-3">Updating...</span>
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-label="@L["editor.updatingaria"]"></span>
+                        <span class="small me-3">@L["editor.updating"]</span>
                     }
 
-                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => QueuePreview(0)">Refresh</button>
+                    <button class="btn btn-light btn-sm" @onclick="() => QueuePreview(0)">
+                        <i class="bi bi-arrow-clockwise" aria-hidden="true"></i> @L["editor.refresh"]
+                    </button>
                 </div>
 
                 @if (previewError is not null)
@@ -121,7 +134,7 @@ else
                     <div class="alert alert-danger m-3 mb-0">@previewError</div>
                 }
 
-                <iframe @ref="previewFrame" title="Document preview"
+                <iframe @ref="previewFrame" title="@L["editor.previewtitle"]"
                         style="width:100%; height:75vh; min-height:500px; border:0;"></iframe>
             </div>
         </div>
@@ -173,7 +186,7 @@ else
         templatePath = Template is null ? null : TemplateSvc.GetPath(Template);
         if (templatePath is null)
         {
-            error = "Template not found.";
+            error = L["editor.notfound"];
             return;
         }
 
@@ -186,18 +199,75 @@ else
         }
         catch
         {
-            error = "This template could not be read.";
+            error = L["editor.unreadable"];
         }
     }
 
-    protected override void OnAfterRender(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender || error is not null) return;
+
+        // After a language switch the page reloads: bring back what the person had typed
+        await RestoreDraftAsync();
+
         // First preview as soon as the page is interactive. It also creates the document.
-        if (firstRender && error is null) QueuePreview(0);
+        QueuePreview(0);
+    }
+
+    // ---------- Draft kept in the browser tab (survives the page reload of a language switch) ----------
+
+    private record DraftState(Dictionary<string, string> Values, string FileName, Guid? DocumentId);
+
+    private string DraftKey => "docgen.draft:" + Path.GetFileName(templatePath);
+
+    private async Task SaveDraftAsync()
+    {
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(new DraftState(Snapshot(), fileName, documentId));
+            await JS.InvokeVoidAsync("draft.save", DraftKey, json);
+        }
+        catch
+        {
+            // the draft is only a convenience: never break the page because of it
+        }
+    }
+
+    /// <summary>Restores the draft only right after a language switch (the switch button sets a short-lived flag).</summary>
+    private async Task RestoreDraftAsync()
+    {
+        try
+        {
+            var json = await JS.InvokeAsync<string?>("draft.loadIfRestoring", DraftKey);
+            if (string.IsNullOrEmpty(json)) return;
+
+            var draft = System.Text.Json.JsonSerializer.Deserialize<DraftState>(json);
+            if (draft is null) return;
+
+            foreach (var f in fields)
+                if (draft.Values.TryGetValue(f, out var v)) values[f] = v;
+
+            if (!string.IsNullOrWhiteSpace(draft.FileName)) fileName = draft.FileName;
+
+            // Keep working on the SAME document instead of creating a new one
+            if (draft.DocumentId is { } id)
+            {
+                documentId = id;
+                savedIds.Add(id);   // so it is not reported as a duplicate of itself
+            }
+
+            await InvokeAsync(StateHasChanged);
+            QueueDuplicateCheck();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Could not restore the draft");
+        }
     }
 
     private void OnFieldChanged(string fieldName)
     {
+        _ = SaveDraftAsync();
         QueuePreview(DebounceMs);
 
         if (fieldName.Equals(DocumentService.PersonNameField, StringComparison.OrdinalIgnoreCase))
@@ -259,12 +329,12 @@ else
         }
         catch (PdfConversionException ex)
         {
-            previewError = ex.Message;
+            previewError = L.Msg(ex.Message);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Preview failed");
-            previewError = "The preview could not be created.";
+            previewError = L["editor.previewfail"];
         }
         finally
         {
@@ -285,11 +355,12 @@ else
         {
             await PersistAsync(snapshot, docx, pdf);
             saveError = null;
+            await SaveDraftAsync();   // now the document id is known
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Automatic save failed");
-            saveError = "Could not save automatically.";
+            saveError = L["editor.saveerr"];
         }
 
         await InvokeAsync(StateHasChanged);
@@ -346,6 +417,7 @@ else
     /// <summary>Runs when the document name box is left or Enter is pressed.</summary>
     private async Task RenameAsync()
     {
+        _ = SaveDraftAsync();
         if (documentId is null || lastSaved is null) return;   // not created yet: the first save uses this name
 
         await saveLock.WaitAsync();
@@ -360,7 +432,7 @@ else
         catch (Exception ex)
         {
             Logger.LogError(ex, "Rename failed");
-            saveError = "Could not rename the document.";
+            saveError = L["editor.renameerr"];
         }
         finally
         {
@@ -401,12 +473,16 @@ else
 
         if (ct.IsCancellationRequested) return;
 
+        var shownName = personName?.Trim() ?? "";
         duplicateWarning = match is null ? null : match.Count == 1
-            ? $"Heads up: a document for \"{personName!.Trim()}\" was already saved on {match.LatestCreatedAt.ToLocalTime():yyyy-MM-dd} (\"{match.LatestDocumentName}\"). You can continue as normal."
-            : $"Heads up: {match.Count} documents for \"{personName!.Trim()}\" are already saved (latest: {match.LatestCreatedAt.ToLocalTime():yyyy-MM-dd}). You can continue as normal.";
+            ? L.Format("editor.dup1", shownName, FormatDay(match.LatestCreatedAt), match.LatestDocumentName)
+            : L.Format("editor.dupn", match.Count, shownName, FormatDay(match.LatestCreatedAt));
 
         await InvokeAsync(StateHasChanged);
     }
+
+    private static string FormatDay(DateTime utc) =>
+        utc.ToLocalTime().ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     // ---------- Downloads ----------
 
@@ -429,7 +505,7 @@ else
         var saved = lastSaved!;
         await SendToBrowserAsync(asPdf ? saved.Pdf : saved.Docx, saved.Name + (asPdf ? ".pdf" : ".docx"));
 
-        message = $"Saved in My documents as \"{saved.Name}\".";
+        message = L.Format("editor.savedas", saved.Name) + ".";
         await UpdateDuplicateWarningAsync(CancellationToken.None);   // refresh the warning for the new state
     });
 
@@ -446,12 +522,12 @@ else
         }
         catch (PdfConversionException ex)
         {
-            actionError = ex.Message;
+            actionError = L.Msg(ex.Message);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Document action failed");
-            actionError = "Something went wrong. Please try again.";
+            actionError = L["editor.wrong"];
         }
         finally
         {

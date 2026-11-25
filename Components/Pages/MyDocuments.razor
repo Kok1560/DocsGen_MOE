@@ -2,165 +2,130 @@
 @attribute [Authorize]
 @rendermode InteractiveServer
 @inject DocumentService Documents
-@inject ShareService ShareSvc
 @inject AuthenticationStateProvider AuthState
-@inject NavigationManager Nav
-@inject IJSRuntime JS
 
-<PageTitle>My documents</PageTitle>
+<PageTitle>@L["nav.documents"]</PageTitle>
 
-<h1 class="h3 mb-3">My documents</h1>
+<div class="page-head">
+    <h1 class="page-title">@L["nav.documents"]</h1>
+</div>
 
-<input class="form-control mb-3" style="max-width: 360px;" placeholder="Search by name..."
-       @bind="search" @bind:event="oninput" @bind:after="LoadAsync" />
+<div class="search-box mb-3">
+    <i class="bi bi-search" aria-hidden="true"></i>
+    <input class="form-control" dir="auto" placeholder="@L["docs.search"]"
+           @bind="search" @bind:event="oninput" @bind:after="LoadAsync" />
+</div>
 
 @if (loading)
 {
-    <p class="text-muted">Loading...</p>
+    <p class="text-muted">@L["docs.loading"]</p>
 }
 else if (items.Count == 0)
 {
     <div class="alert alert-info">
-        @(string.IsNullOrWhiteSpace(search)
-            ? "You have no documents yet. Open a template and it will be saved here automatically."
-            : "No documents match your search.")
+        @(string.IsNullOrWhiteSpace(search) ? L["docs.empty"] : L["docs.nomatch"])
     </div>
 }
 else
 {
-    <div class="table-responsive">
-        <table class="table align-middle">
-            <thead>
-                <tr><th>Name</th><th>Template</th><th>Created</th><th class="text-end">Actions</th></tr>
-            </thead>
-            <tbody>
-                @foreach (var d in items)
-                {
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-gov align-middle mb-0">
+                <thead>
                     <tr>
-                        <td>@d.Name</td>
-                        <td>@d.TemplateName</td>
-                        <td>@d.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
-                        <td class="text-end text-nowrap">
-                            <button class="btn @(viewingId == d.Id ? "btn-secondary" : "btn-outline-secondary") btn-sm"
-                                    @onclick="() => ToggleView(d.Id)">
-                                @(viewingId == d.Id ? "Close" : "View")
-                            </button>
-                            <a class="btn btn-outline-primary btn-sm" href="/download/@d.Id/docx" download data-enhance-nav="false">Word</a>
-                            <a class="btn btn-outline-primary btn-sm" href="/download/@d.Id/pdf" download data-enhance-nav="false">PDF</a>
-                            <button class="btn btn-outline-secondary btn-sm" @onclick="() => ToggleShareAsync(d.Id)">Share</button>
-
-                            @if (confirmingId == d.Id)
-                            {
-                                <button class="btn btn-danger btn-sm" @onclick="() => DeleteAsync(d.Id)">Confirm delete</button>
-                                <button class="btn btn-outline-secondary btn-sm" @onclick="() => confirmingId = null">Cancel</button>
-                            }
-                            else
-                            {
-                                <button class="btn btn-outline-danger btn-sm" @onclick="() => confirmingId = d.Id">Delete</button>
-                            }
-                        </td>
+                        <th class="text-center">@L["docs.name"]</th>
+                        <th class="text-center">@L["docs.template"]</th>
+                        <th class="text-center">@L["docs.created"]</th>
+                        <th class="text-center">@L["docs.actions"]</th>
                     </tr>
-
-                    @if (viewingId == d.Id)
+                </thead>
+                <tbody>
+                    @foreach (var d in items)
                     {
                         <tr>
-                            <td colspan="4" class="bg-body-tertiary">
-                                <div class="p-2">
-                                    <iframe src="/view/@d.Id" title="@d.Name"
-                                            style="width:100%; height:75vh; min-height:500px; border:1px solid #dee2e6;"></iframe>
-                                </div>
-                            </td>
-                        </tr>
-                    }
+                            <td class="text-center fw-semibold">@d.Name</td>
+                            <td class="text-center">@d.TemplateName</td>
+                            <td class="text-center" dir="ltr">@FormatDate(d.CreatedAt)</td>
+                            <td class="text-center">
+                                <div class="d-flex flex-wrap justify-content-center gap-2">
+                                    <button class="btn @(viewingId == d.Id ? "btn-primary" : "btn-outline-primary") btn-sm"
+                                            @onclick="() => ToggleView(d.Id)">
+                                        <i class="bi @(viewingId == d.Id ? "bi-x-lg" : "bi-eye")" aria-hidden="true"></i>
+                                        @(viewingId == d.Id ? L["docs.close"] : L["docs.view"])
+                                    </button>
+                                    <a class="btn btn-outline-primary btn-sm" href="/download/@d.Id/docx" download data-enhance-nav="false">
+                                        <i class="bi bi-file-earmark-word" aria-hidden="true"></i> Word
+                                    </a>
+                                    <a class="btn btn-outline-primary btn-sm" href="/download/@d.Id/pdf" download data-enhance-nav="false">
+                                        <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF
+                                    </a>
+                                    <button class="btn btn-outline-secondary btn-sm" @onclick="() => ToggleShare(d.Id)">
+                                        <i class="bi bi-share" aria-hidden="true"></i> @L["docs.share"]
+                                    </button>
 
-                    @if (sharingId == d.Id)
-                    {
-                        <tr>
-                            <td colspan="4" class="bg-body-tertiary">
-                                <div class="p-2">
-                                    <h6 class="mb-1">Share "@d.Name"</h6>
-                                    <p class="text-muted small">
-                                        Anyone with the link can view this PDF (read only) without logging in.
-                                        They cannot see your other documents.
-                                    </p>
-
-                                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
-                                        <label class="small mb-0">Link expires</label>
-                                        <select class="form-select form-select-sm w-auto" @bind="expiryDays">
-                                            <option value="1">in 1 day</option>
-                                            <option value="7">in 7 days</option>
-                                            <option value="30">in 30 days</option>
-                                            <option value="0">never</option>
-                                        </select>
-                                        <button class="btn btn-primary btn-sm" @onclick="CreateShareAsync">Create link</button>
-                                    </div>
-
-                                    @if (shareError is not null)
+                                    @if (confirmingId == d.Id)
                                     {
-                                        <div class="alert alert-danger py-2">@shareError</div>
-                                    }
-
-                                    @if (newLink is not null)
-                                    {
-                                        <div class="alert alert-success py-2">
-                                            <div class="small mb-1">
-                                                Copy this link now. For security it cannot be shown again
-                                                (you can always create a new one).
-                                            </div>
-                                            <div class="input-group input-group-sm">
-                                                <input class="form-control" readonly value="@newLink" />
-                                                <button class="btn btn-outline-success" @onclick="CopyLinkAsync">Copy</button>
-                                            </div>
-
-                                            <a class="btn btn-success btn-sm mt-2"
-                                               href="@WhatsAppUrl(d.Name)" target="_blank" rel="noopener noreferrer">
-                                                Send via WhatsApp
-                                            </a>
-
-                                            @if (copyMessage is not null)
-                                            {
-                                                <div class="small mt-1">@copyMessage</div>
-                                            }
-                                        </div>
-                                    }
-
-                                    @if (shares.Count == 0)
-                                    {
-                                        <p class="text-muted small mb-0">No links yet.</p>
+                                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteAsync(d.Id)">@L["docs.confirmdelete"]</button>
+                                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => confirmingId = null">@L["docs.cancel"]</button>
                                     }
                                     else
                                     {
-                                        <table class="table table-sm mb-0">
-                                            <thead>
-                                                <tr><th>Created</th><th>Expires</th><th>Status</th><th></th></tr>
-                                            </thead>
-                                            <tbody>
-                                                @foreach (var s in shares)
-                                                {
-                                                    <tr>
-                                                        <td>@s.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
-                                                        <td>@(s.ExpiresAt is null ? "never" : s.ExpiresAt.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm"))</td>
-                                                        <td>
-                                                            <span class="badge @StatusClass(s.Status)">@s.Status</span>
-                                                        </td>
-                                                        <td class="text-end">
-                                                            @if (s.Status == "Active")
-                                                            {
-                                                                <button class="btn btn-outline-danger btn-sm" @onclick="() => RevokeShareAsync(s.Id)">Revoke</button>
-                                                            }
-                                                        </td>
-                                                    </tr>
-                                                }
-                                            </tbody>
-                                        </table>
+                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => confirmingId = d.Id">
+                                            <i class="bi bi-trash" aria-hidden="true"></i> @L["docs.delete"]
+                                        </button>
                                     }
                                 </div>
                             </td>
                         </tr>
+
+                        @if (viewingId == d.Id)
+                        {
+                            <tr>
+                                <td colspan="4" class="share-panel">
+                                    <div class="p-2">
+                                        <iframe src="/view/@d.Id" title="@d.Name" class="pdf-frame"
+                                                style="width:100%; height:75vh; min-height:500px;"></iframe>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+
+                        @if (sharingId == d.Id)
+                        {
+                            <tr>
+                                <td colspan="4" class="share-panel">
+                                    <div class="p-2">
+                                        <h6 class="mb-2">@L.Format("share.title", d.Name)</h6>
+
+                                        @* These run in the browser directly (not through Blazor), so the share window is allowed to open *@
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <button type="button" class="btn btn-outline-primary btn-sm"
+                                                    data-id="@d.Id" data-name="@d.Name"
+                                                    onclick="shareDocumentPdf(this, 'any')">
+                                                <i class="bi bi-file-earmark-pdf" aria-hidden="true"></i> PDF
+                                            </button>
+
+                                            <button type="button" class="btn btn-success btn-sm"
+                                                    data-id="@d.Id" data-name="@d.Name"
+                                                    onclick="shareDocumentPdf(this, 'whatsapp')">
+                                                <i class="bi bi-whatsapp" aria-hidden="true"></i> @L["share.whatsapp"]
+                                            </button>
+
+                                            <button type="button" class="btn btn-outline-secondary btn-sm"
+                                                    data-id="@d.Id"
+                                                    data-ok="@L["share.copied"]" data-fail="@L["share.copyfail"]"
+                                                    onclick="copyDocumentPdf(this)">
+                                                <i class="bi bi-clipboard" aria-hidden="true"></i> @L["share.copy"]
+                                            </button>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
                     }
-                }
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+        </div>
     </div>
 }
 
@@ -169,18 +134,9 @@ else
     private string? search;
     private bool loading = true;
     private Guid? confirmingId;
-    private int userId;
-
-    // Viewing state
     private Guid? viewingId;
-
-    // Sharing state
     private Guid? sharingId;
-    private List<ShareInfo> shares = [];
-    private int expiryDays = 7;
-    private string? newLink;
-    private string? copyMessage;
-    private string? shareError;
+    private int userId;
 
     protected override async Task OnInitializedAsync()
     {
@@ -197,9 +153,9 @@ else
 
     private async Task DeleteAsync(Guid id)
     {
-        await Documents.DeleteAsync(userId, id);   // its share links are deleted with it
+        await Documents.DeleteAsync(userId, id);
         confirmingId = null;
-        if (sharingId == id) CloseShare();
+        if (sharingId == id) sharingId = null;
         if (viewingId == id) viewingId = null;
         await LoadAsync();
     }
@@ -214,79 +170,26 @@ else
             return;
         }
 
-        CloseShare();         // only one panel is open at a time
+        sharingId = null;     // only one panel is open at a time
         confirmingId = null;
         viewingId = id;
     }
 
     // ---------- Share ----------
 
-    private async Task ToggleShareAsync(Guid id)
+    private void ToggleShare(Guid id)
     {
         if (sharingId == id)
         {
-            CloseShare();
+            sharingId = null;
             return;
         }
 
-        CloseShare();
         viewingId = null;     // only one panel is open at a time
         confirmingId = null;
         sharingId = id;
-        shares = await ShareSvc.ListAsync(userId, id);
     }
 
-    private void CloseShare()
-    {
-        sharingId = null;
-        newLink = null;
-        copyMessage = null;
-        shareError = null;
-        shares = [];
-    }
-
-    private async Task CreateShareAsync()
-    {
-        if (sharingId is not { } id) return;
-        shareError = null;
-        copyMessage = null;
-
-        var token = await ShareSvc.CreateAsync(userId, id, expiryDays);
-        if (token is null)
-        {
-            shareError = "The link could not be created.";
-            return;
-        }
-
-        newLink = $"{Nav.BaseUri}s/{token}";
-        shares = await ShareSvc.ListAsync(userId, id);
-    }
-
-    private async Task RevokeShareAsync(Guid shareId)
-    {
-        if (sharingId is not { } id) return;
-
-        await ShareSvc.RevokeAsync(userId, shareId);
-        newLink = null;      // it may have been the link that is on screen
-        copyMessage = null;
-        shares = await ShareSvc.ListAsync(userId, id);
-    }
-
-    private async Task CopyLinkAsync()
-    {
-        if (newLink is null) return;
-        var ok = await JS.InvokeAsync<bool>("copyText", newLink);
-        copyMessage = ok ? "Copied." : "Could not copy automatically. Select the link and press Ctrl+C.";
-    }
-
-    // Opens WhatsApp (app or WhatsApp Web) with the message ready; the user picks the contact
-    private string WhatsAppUrl(string documentName) =>
-        "https://wa.me/?text=" + Uri.EscapeDataString($"{documentName}: {newLink}");
-
-    private static string StatusClass(string status) => status switch
-    {
-        "Active" => "text-bg-success",
-        "Expired" => "text-bg-warning",
-        _ => "text-bg-secondary"
-    };
+    private static string FormatDate(DateTime utc) =>
+        utc.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 }

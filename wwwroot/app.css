@@ -427,6 +427,31 @@ h1:focus {
     border-radius: .8rem;
 }
 
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem;
+    height: 100%;
+    background: #fff;
+    border: 1px solid var(--moe-line);
+    border-inline-start: 5px solid var(--moe-gold);
+    border-radius: .9rem;
+    box-shadow: 0 2px 8px rgba(10,42,94,.05);
+}
+
+.stat-label {
+    color: var(--moe-muted);
+    font-size: .9rem;
+}
+
+.stat-value {
+    font-size: 2.4rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: var(--moe-navy);
+}
+
 .action-body {
     display: flex;
     flex-direction: column;

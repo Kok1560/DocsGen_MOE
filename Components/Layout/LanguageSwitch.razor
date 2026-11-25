@@ -1,6 +1,7 @@
 @inject NavigationManager Nav
 
 <a class="lang-switch @(Light ? "on-light" : "")" href="@Href" data-enhance-nav="false"
+   onclick="try{sessionStorage.setItem('docgen.restore',Date.now())}catch(e){}"
    title="@L["lang.title"]" aria-label="@L["lang.title"]">
     <i class="bi bi-translate" aria-hidden="true"></i>
     <span>@L["lang.other"]</span>
