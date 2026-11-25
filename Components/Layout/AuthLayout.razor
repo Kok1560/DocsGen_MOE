@@ -1,0 +1,30 @@
+@inherits LayoutComponentBase
+
+<div class="site">
+    @* <div class="flag-stripe" aria-hidden="true"></div> *@
+
+    <div class="auth-page">
+        <div class="auth-lang"><LanguageSwitch Light="true" /></div>
+
+        <div class="auth-card">
+            <section class="auth-aside">
+                <span class="brand-logo brand-logo-lg"><img src="images/moe-logo.svg" alt="" /></span>
+                <div class="brand-country">@L["gov.country"]</div>
+                <h2 class="auth-ministry">@L["gov.ministry"]</h2>
+                <div class="auth-app">@L["app.name"]</div>
+                <p class="auth-tagline">@L["app.tagline"]</p>
+                <ul class="auth-points">
+                    <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> @L["auth.point1"]</li>
+                    <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> @L["auth.point2"]</li>
+                    <li><i class="bi bi-check-circle-fill" aria-hidden="true"></i> @L["auth.point3"]</li>
+                </ul>
+            </section>
+
+            <section class="auth-main">
+                @Body
+            </section>
+        </div>
+
+        <AppFooter />
+    </div>
+</div>

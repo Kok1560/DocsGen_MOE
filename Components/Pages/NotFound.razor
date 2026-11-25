@@ -1,5 +1,11 @@
-﻿@page "/not-found"
+@page "/not-found"
 @layout MainLayout
 
-<h3>Not Found</h3>
-<p>Sorry, the content you are looking for does not exist.</p>
+<PageTitle>@L["notfound.title"]</PageTitle>
+
+<div class="text-center py-5">
+    <i class="bi bi-compass notfound-icon" aria-hidden="true"></i>
+    <h1 class="page-title justify-content-center mt-2">@L["notfound.title"]</h1>
+    <p class="page-sub mb-4">@L["notfound.text"]</p>
+    <a class="btn btn-primary" href="/">@L["notfound.home"]</a>
+</div>

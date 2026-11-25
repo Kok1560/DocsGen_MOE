@@ -1,0 +1,39 @@
+@* <div class="flag-stripe" aria-hidden="true"></div> *@
+<header class="gov-header">
+    <div class="container gov-header-inner">
+        <a class="brand" href="/">
+            <span class="brand-logo"><img src="images/moe-logo.svg" alt="" /></span>
+            <span class="brand-text">
+                <span class="brand-country">@L["gov.country"]</span>
+                <span class="brand-ministry">@L["gov.ministry"]</span>
+                <span class="brand-app">@L["app.name"]</span>
+            </span>
+        </a>
+
+        <div class="header-actions">
+            <LanguageSwitch />
+
+            @if (ShowAccount)
+            {
+                <AuthorizeView>
+                    <Authorized>
+                        <span class="user-chip">
+                            <i class="bi bi-person-circle" aria-hidden="true"></i>
+                            <span>@context.User.Identity?.Name</span>
+                        </span>
+                        <form method="post" action="/logout" class="m-0">
+                            <button type="submit" class="btn btn-sm btn-logout">
+                                <i class="bi bi-box-arrow-right" aria-hidden="true"></i> @L["top.logout"]
+                            </button>
+                        </form>
+                    </Authorized>
+                </AuthorizeView>
+            }
+        </div>
+    </div>
+</header>
+
+@code {
+    /// <summary>Show the user name and the log out button (for logged-in pages).</summary>
+    [Parameter] public bool ShowAccount { get; set; }
+}

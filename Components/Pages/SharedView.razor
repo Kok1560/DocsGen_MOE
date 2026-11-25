@@ -1,9 +1,9 @@
-﻿@page "/s/{Token}"
+@page "/s/{Token}"
 @layout DocGen.Components.Layout.PublicLayout
 @attribute [AllowAnonymous]
 @inject ShareService Shares
 
-<PageTitle>@(doc?.Name ?? "Shared document")</PageTitle>
+<PageTitle>@(doc?.Name ?? L["shared.title"])</PageTitle>
 
 <HeadContent>
     <meta name="referrer" content="no-referrer" />
@@ -12,19 +12,19 @@
 
 @if (doc is null)
 {
-    <div class="alert alert-warning">
-        This link is not valid. It may have expired or been revoked.
-    </div>
+    <div class="alert alert-warning">@L["shared.invalid"]</div>
 }
 else
 {
-    <div class="d-flex align-items-center mb-3">
-        <h1 class="h4 mb-0 me-auto">@doc.Name</h1>
-        <a class="btn btn-primary btn-sm" href="/s/@Token/pdf?download=true">Download PDF</a>
+    <div class="d-flex align-items-center mb-3 gap-2">
+        <h1 class="page-title me-auto">@doc.Name</h1>
+        <a class="btn btn-primary btn-sm" href="/s/@Token/pdf?download=true">
+            <i class="bi bi-download" aria-hidden="true"></i> @L["shared.download"]
+        </a>
     </div>
 
-    <iframe src="/s/@Token/pdf" title="@doc.Name"
-            style="width:100%; height:85vh; min-height:500px; border:1px solid #dee2e6;"></iframe>
+    <iframe src="/s/@Token/pdf" title="@doc.Name" class="pdf-frame"
+            style="width:100%; height:85vh; min-height:500px;"></iframe>
 }
 
 @code {

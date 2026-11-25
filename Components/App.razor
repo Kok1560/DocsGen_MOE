@@ -1,26 +1,43 @@
-﻿<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="@Loc.Lang" dir="@Loc.Dir">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <ResourcePreloader />
-    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" />
+    <link rel="stylesheet" href="@Assets[BootstrapCss]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["DocGen.styles.css"]" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
 
     <ImportMap />
-    <link rel="icon" type="image/png" href="favicon.png" />
+    <link rel="icon" type="image/png" href="favicon.png?v=2" />
     <HeadOutlet />
 </head>
 
 <body>
     <Routes />
     <ReconnectModal />
+
+    <div id="blazor-error-ui" data-nosnippet>
+        @L["ui.error"]
+        <a href="." class="reload">@L["ui.reload"]</a>
+        <span class="dismiss">🗙</span>
+    </div>
+
     <script src="@Assets["_framework/blazor.web.js"]"></script>
     <script src="app.js"></script>
 </body>
 
 </html>
+
+@code {
+    // Arabic uses the right-to-left build of Bootstrap, English the normal one
+    private static string BootstrapCss => Loc.IsArabic
+        ? "lib/bootstrap/dist/css/bootstrap.rtl.min.css"
+        : "lib/bootstrap/dist/css/bootstrap.min.css";
+}

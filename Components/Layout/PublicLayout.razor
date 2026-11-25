@@ -1,5 +1,13 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
-<div class="container py-4">
-    @Body
+<div class="site">
+    <GovHeader />
+
+    <main class="site-main">
+        <div class="container content">
+            @Body
+        </div>
+    </main>
+
+    <AppFooter />
 </div>

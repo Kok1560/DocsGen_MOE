@@ -1,0 +1,16 @@
+@inject NavigationManager Nav
+
+<a class="lang-switch @(Light ? "on-light" : "")" href="@Href" data-enhance-nav="false"
+   title="@L["lang.title"]" aria-label="@L["lang.title"]">
+    <i class="bi bi-translate" aria-hidden="true"></i>
+    <span>@L["lang.other"]</span>
+</a>
+
+@code {
+    /// <summary>Use the dark-on-light look (for pages without the blue header).</summary>
+    [Parameter] public bool Light { get; set; }
+
+    private string Href =>
+        "/set-language?culture=" + (Loc.IsArabic ? "en" : "ar") +
+        "&returnUrl=" + Uri.EscapeDataString("/" + Nav.ToBaseRelativePath(Nav.Uri));
+}

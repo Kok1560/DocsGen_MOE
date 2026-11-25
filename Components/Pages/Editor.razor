@@ -1,4 +1,4 @@
-﻿@page "/editor"
+@page "/editor"
 @attribute [Authorize]
 @rendermode InteractiveServer
 @implements IDisposable
@@ -44,21 +44,39 @@ else
                                               <input class="form-control"
                                                      @bind="values[key]"
                                                      @bind:event="oninput"
-                                                     @bind:after="OnFieldChanged" />
-                                          </div>
+                                                     @bind:after="() => OnFieldChanged(key)" />
+
+                            @if (duplicateWarning is not null
+                                                && key.Equals(DocumentService.PersonNameField, StringComparison.OrdinalIgnoreCase))
+                            {
+                                <div class="alert alert-warning py-1 px-2 small mt-1 mb-0">@duplicateWarning</div>
+                            }
+                        </div>
                     }
 
                     <hr />
 
-                    <div class="mb-3">
-                        <label class="form-label">File name</label>
-                        <input class="form-control" @bind="fileName" />
+                    <div class="mb-1">
+                        <label class="form-label">Document name</label>
+                        <input class="form-control" @bind="fileName" @bind:after="RenameAsync" />
                     </div>
 
+                    @if (saveError is not null)
+                    {
+                        <p class="text-danger small mb-3">@saveError</p>
+                    }
+                    else if (lastSaved is not null)
+                    {
+                        <p class="text-success small mb-3">Saved in My documents as "@lastSaved.Name"</p>
+                    }
+                    else
+                    {
+                        <p class="text-muted small mb-3">It will be saved in My documents automatically.</p>
+                    }
+
                     <div class="d-grid gap-2">
-                        <button class="btn btn-primary" @onclick="DownloadWordAsync" disabled="@busy">Download Word</button>
-                        <button class="btn btn-outline-primary" @onclick="DownloadPdfAsync" disabled="@busy">Download PDF</button>
-                        <button class="btn btn-success" @onclick="SaveAsync" disabled="@busy">Save to My documents</button>
+                        <button class="btn btn-primary" @onclick="() => DownloadAsync(false)" disabled="@busy">Download Word</button>
+                        <button class="btn btn-outline-primary" @onclick="() => DownloadAsync(true)" disabled="@busy">Download PDF</button>
                     </div>
 
                     @if (busy)
@@ -134,6 +152,18 @@ else
     private bool previewLoading;
     private string? previewError;
 
+    // Automatic saving: this editor page owns exactly one document
+    private record SavedState(string ValuesKey, string Name, byte[] Docx, byte[] Pdf);
+    private Guid? documentId;                              // null until the document is created
+    private SavedState? lastSaved;                         // what is currently stored for that document
+    private readonly List<Guid> savedIds = [];             // excluded from the duplicate-name warning
+    private readonly SemaphoreSlim saveLock = new(1, 1);   // one save at a time (preview and buttons can overlap)
+    private string? saveError;
+
+    // Duplicate-name warning state
+    private CancellationTokenSource? duplicateCts;
+    private string? duplicateWarning;
+
     protected override async Task OnInitializedAsync()
     {
         var state = await AuthState.GetAuthenticationStateAsync();
@@ -162,13 +192,19 @@ else
 
     protected override void OnAfterRender(bool firstRender)
     {
-        // First preview as soon as the page is interactive (JavaScript is not available before that)
+        // First preview as soon as the page is interactive. It also creates the document.
         if (firstRender && error is null) QueuePreview(0);
     }
 
-    // ---------- Live preview ----------
+    private void OnFieldChanged(string fieldName)
+    {
+        QueuePreview(DebounceMs);
 
-    private void OnFieldChanged() => QueuePreview(DebounceMs);
+        if (fieldName.Equals(DocumentService.PersonNameField, StringComparison.OrdinalIgnoreCase))
+            QueueDuplicateCheck();
+    }
+
+    // ---------- Live preview (+ automatic save) ----------
 
     /// <summary>Cancels any pending preview and schedules a new one after the delay.</summary>
     private void QueuePreview(int delayMs)
@@ -199,14 +235,19 @@ else
 
         try
         {
-            var docx = Engine.Fill(templatePath!, values);
+            var snapshot = Snapshot();
+            var docx = Engine.Fill(templatePath!, snapshot);
             var pdf = await Pdf.ConvertAsync(docx, ct);
 
             ct.ThrowIfCancellationRequested();   // a newer edit arrived while converting: drop this result
 
-            using var stream = new MemoryStream(pdf);
-            using var streamRef = new DotNetStreamReference(stream);
-            await JS.InvokeVoidAsync("setPdfPreview", ct, previewFrame, streamRef);
+            using (var stream = new MemoryStream(pdf))
+            using (var streamRef = new DotNetStreamReference(stream))
+            {
+                await JS.InvokeVoidAsync("setPdfPreview", ct, previewFrame, streamRef);
+            }
+
+            await AutoSaveAsync(snapshot, docx, pdf);   // the document in My documents follows the preview
         }
         catch (OperationCanceledException)
         {
@@ -236,28 +277,160 @@ else
         }
     }
 
-    // ---------- Buttons ----------
+    // ---------- Automatic saving ----------
 
-    private Task DownloadWordAsync() => RunAsync(async () =>
+    private async Task AutoSaveAsync(Dictionary<string, string> snapshot, byte[] docx, byte[] pdf)
     {
-        var docx = Engine.Fill(templatePath!, Snapshot());
-        await SendToBrowserAsync(docx, FileNames.Sanitize(fileName) + ".docx");
-    });
+        try
+        {
+            await PersistAsync(snapshot, docx, pdf);
+            saveError = null;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Automatic save failed");
+            saveError = "Could not save automatically.";
+        }
 
-    private Task DownloadPdfAsync() => RunAsync(async () =>
+        await InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Makes My documents match the editor: creates the document the first time,
+    /// replaces its content when the values changed, or only renames it when just the name changed.
+    /// </summary>
+    private async Task PersistAsync(Dictionary<string, string> snapshot, byte[] docx, byte[] pdf)
     {
-        var docx = Engine.Fill(templatePath!, Snapshot());
-        var pdf = await Pdf.ConvertAsync(docx);
-        await SendToBrowserAsync(pdf, FileNames.Sanitize(fileName) + ".pdf");
-    });
+        await saveLock.WaitAsync();
+        try
+        {
+            var name = FileNames.Sanitize(fileName);
+            var valuesKey = ValuesKey(snapshot);
 
-    private Task SaveAsync() => RunAsync(async () =>
+            if (documentId is not null && lastSaved is not null
+                && lastSaved.ValuesKey == valuesKey && lastSaved.Name == name)
+                return;   // nothing changed
+
+            if (documentId is not null)
+            {
+                var sameValues = lastSaved is not null && lastSaved.ValuesKey == valuesKey;
+                var ok = sameValues
+                    ? await Documents.RenameAsync(userId, documentId.Value, name)
+                    : await Documents.UpdateContentAsync(userId, documentId.Value, name, docx, pdf, snapshot);
+
+                if (ok)
+                {
+                    lastSaved = new SavedState(valuesKey, name, docx, pdf);
+                    return;
+                }
+
+                // The document was deleted in My documents while this page was open: start a new one
+                documentId = null;
+                lastSaved = null;
+            }
+
+            var (id, savedName) = await Documents.CreateAsync(userId, name, templateName, docx, pdf, snapshot);
+            documentId = id;
+            savedIds.Add(id);
+
+            // Show the numbered name, unless the person has already typed their own meanwhile
+            if (FileNames.Sanitize(fileName) == name) fileName = savedName;
+            lastSaved = new SavedState(valuesKey, savedName, docx, pdf);
+        }
+        finally
+        {
+            saveLock.Release();
+        }
+    }
+
+    /// <summary>Runs when the document name box is left or Enter is pressed.</summary>
+    private async Task RenameAsync()
+    {
+        if (documentId is null || lastSaved is null) return;   // not created yet: the first save uses this name
+
+        await saveLock.WaitAsync();
+        try
+        {
+            var name = FileNames.Sanitize(fileName);
+            if (documentId is null || lastSaved is null || lastSaved.Name == name) return;
+
+            if (await Documents.RenameAsync(userId, documentId.Value, name))
+                lastSaved = lastSaved with { Name = name };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Rename failed");
+            saveError = "Could not rename the document.";
+        }
+        finally
+        {
+            saveLock.Release();
+        }
+    }
+
+    // ---------- Duplicate-name warning (never blocks anything) ----------
+
+    private void QueueDuplicateCheck()
+    {
+        duplicateCts?.Cancel();
+        var cts = duplicateCts = new CancellationTokenSource();
+        _ = RunDuplicateCheckAsync(cts.Token);
+    }
+
+    private async Task RunDuplicateCheckAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(500, ct);   // wait until the person stops typing
+            await UpdateDuplicateWarningAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // a newer edit replaced this check
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Duplicate-name check failed");   // a failed check must never break the page
+        }
+    }
+
+    private async Task UpdateDuplicateWarningAsync(CancellationToken ct)
+    {
+        values.TryGetValue(DocumentService.PersonNameField, out var personName);
+        var match = await Documents.FindPersonDuplicateAsync(userId, personName, savedIds);
+
+        if (ct.IsCancellationRequested) return;
+
+        duplicateWarning = match is null ? null : match.Count == 1
+            ? $"Heads up: a document for \"{personName!.Trim()}\" was already saved on {match.LatestCreatedAt.ToLocalTime():yyyy-MM-dd} (\"{match.LatestDocumentName}\"). You can continue as normal."
+            : $"Heads up: {match.Count} documents for \"{personName!.Trim()}\" are already saved (latest: {match.LatestCreatedAt.ToLocalTime():yyyy-MM-dd}). You can continue as normal.";
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ---------- Downloads ----------
+
+    private Task DownloadAsync(bool asPdf) => RunAsync(async () =>
     {
         var snapshot = Snapshot();
-        var docx = Engine.Fill(templatePath!, snapshot);
-        var pdf = await Pdf.ConvertAsync(docx);
-        await Documents.SaveAsync(userId, fileName, templateName, docx, pdf, snapshot);
-        message = "Document saved.";
+
+        // Reuse the stored files when the values haven't changed; otherwise generate fresh ones
+        if (lastSaved is not null && lastSaved.ValuesKey == ValuesKey(snapshot))
+        {
+            await PersistAsync(snapshot, lastSaved.Docx, lastSaved.Pdf);   // only renames if the name changed
+        }
+        else
+        {
+            var docx = Engine.Fill(templatePath!, snapshot);
+            var pdf = await Pdf.ConvertAsync(docx);
+            await PersistAsync(snapshot, docx, pdf);
+        }
+
+        var saved = lastSaved!;
+        await SendToBrowserAsync(asPdf ? saved.Pdf : saved.Docx, saved.Name + (asPdf ? ".pdf" : ".docx"));
+
+        message = $"Saved in My documents as \"{saved.Name}\".";
+        await UpdateDuplicateWarningAsync(CancellationToken.None);   // refresh the warning for the new state
     });
 
     /// <summary>Runs a button action with a busy flag and friendly error handling.</summary>
@@ -289,6 +462,12 @@ else
     // A copy of the values, so typing during a slow conversion cannot change what is generated
     private Dictionary<string, string> Snapshot() => new(values, StringComparer.OrdinalIgnoreCase);
 
+    // One string that describes "these values", used to see whether anything changed
+    private static string ValuesKey(Dictionary<string, string> snapshot) =>
+        string.Join("\u0001", snapshot
+            .OrderBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(kv => kv.Key + "\u0002" + kv.Value));
+
     private async Task SendToBrowserAsync(byte[] bytes, string downloadName)
     {
         using var stream = new MemoryStream(bytes);
@@ -296,5 +475,9 @@ else
         await JS.InvokeVoidAsync("downloadFileFromStream", downloadName, streamRef);
     }
 
-    public void Dispose() => previewCts?.Cancel();   // page closed: stop pending work
+    public void Dispose()
+    {
+        previewCts?.Cancel();     // page closed: stop pending work
+        duplicateCts?.Cancel();
+    }
 }

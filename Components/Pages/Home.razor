@@ -1,13 +1,38 @@
-﻿@page "/"
+@page "/"
 @attribute [Authorize]
+@inject DocumentService Documents
+@inject AuthenticationStateProvider AuthState
 
 <PageTitle>Home</PageTitle>
 
-<AuthorizeView>
-    <h1>Hello, @context.User.Identity?.Name</h1>
-    <p>You are logged in.</p>
+<h1 class="h3 mb-4">Hello, @username</h1>
 
-    @* <form method="post" action="/logout">
-        <button type="submit" class="btn btn-outline-secondary">Log out</button>
-    </form> *@
-</AuthorizeView>
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-lg-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="text-muted small">Documents generated</div>
+                <div class="display-5 fw-semibold">@count</div>
+                <a href="documents" class="small">View my documents</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<a href="templates" class="btn btn-primary me-2">Create a document</a>
+
+<form method="post" action="/logout" class="d-inline">
+    <button type="submit" class="btn btn-outline-secondary">Log out</button>
+</form>
+
+@code {
+    private string username = "";
+    private int count;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthState.GetAuthenticationStateAsync();
+        username = state.User.Identity?.Name ?? "";
+        count = await Documents.CountAsync(state.User.GetUserId());
+    }
+}

@@ -1,17 +1,17 @@
-﻿@page "/templates"
+@page "/templates"
 @attribute [Authorize]
 @inject TemplateService TemplateSvc
 
-<PageTitle>Templates</PageTitle>
+<PageTitle>@L["nav.templates"]</PageTitle>
 
-<h1 class="h3 mb-3">Templates</h1>
+<div class="page-head">
+    <h1 class="page-title">@L["nav.templates"]</h1>
+    <p class="page-sub">@L["tpl.sub"]</p>
+</div>
 
 @if (items.Count == 0)
 {
-    <div class="alert alert-info">
-        No templates yet. Copy a <code>.docx</code> file into the <code>Templates</code> folder
-        and refresh this page.
-    </div>
+    <div class="alert alert-info">@L["tpl.empty"]</div>
 }
 else
 {
@@ -19,9 +19,12 @@ else
         @foreach (var t in items)
         {
             <div class="col-md-6 col-lg-4">
-                <div class="card h-100">
+                <div class="card tpl-card h-100">
                     <div class="card-body">
-                        <h5 class="card-title">@t.Name</h5>
+                        <div class="d-flex align-items-start gap-3 mb-2">
+                            <span class="tpl-icon"><i class="bi bi-file-earmark-word-fill" aria-hidden="true"></i></span>
+                            <h5 class="card-title mb-0 pt-1">@t.Name</h5>
+                        </div>
 
                         @if (t.Error is not null)
                         {
@@ -29,26 +32,29 @@ else
                         }
                         else if (t.Fields.Count == 0)
                         {
-                            <p class="text-muted small mb-0">No fields found. Add placeholders like {{Name}} to the document.</p>
+                            <p class="text-muted small mb-0">@L["tpl.nofields"]</p>
                         }
                         else
                         {
-                            <p class="text-muted small mb-2">@t.Fields.Count field(s):</p>
+                            <p class="text-muted small mb-2">@L.Format("tpl.fields", t.Fields.Count)</p>
                             @foreach (var f in t.Fields)
                             {
-                                <span class="badge text-bg-secondary me-1">@f</span>
+                                <span class="badge badge-field me-1 mb-1">@f</span>
                             }
                         }
                     </div>
+
+                    @if (t.Error is null)
+                    {
+                        <div class="card-footer bg-transparent border-0 pb-3">
+                            <a class="btn btn-primary btn-sm"
+                               href="@($"editor?template={Uri.EscapeDataString(t.FileName)}")">
+                                <i class="bi bi-pencil-square" aria-hidden="true"></i> @L["tpl.use"]
+                            </a>
+                        </div>
+                    }
                 </div>
             </div>
-                @if (t.Error is null)
-                {
-                    <div class="card-footer bg-transparent border-0 pb-3">
-                        <a class="btn btn-primary btn-sm"
-                           href="@($"editor?template={Uri.EscapeDataString(t.FileName)}")">Use template</a>
-                    </div>
-                }
         }
     </div>
 }

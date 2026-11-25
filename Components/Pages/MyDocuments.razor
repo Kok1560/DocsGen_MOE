@@ -1,4 +1,4 @@
-﻿@page "/documents"
+@page "/documents"
 @attribute [Authorize]
 @rendermode InteractiveServer
 @inject DocumentService Documents
@@ -22,7 +22,7 @@ else if (items.Count == 0)
 {
     <div class="alert alert-info">
         @(string.IsNullOrWhiteSpace(search)
-            ? "You have not saved any documents yet. Open a template and click \"Save to My documents\"."
+            ? "You have no documents yet. Open a template and it will be saved here automatically."
             : "No documents match your search.")
     </div>
 }
@@ -31,16 +31,20 @@ else
     <div class="table-responsive">
         <table class="table align-middle">
             <thead>
-                <tr><th class="text-center">Name</th><th class="text-center">Template</th><th class="text-center">Created</th><th class="text-center">Actions</th></tr>
+                <tr><th>Name</th><th>Template</th><th>Created</th><th class="text-end">Actions</th></tr>
             </thead>
             <tbody>
                 @foreach (var d in items)
                 {
                     <tr>
-                        <td class="text-center">@d.Name</td>
-                        <td class="text-center">@d.TemplateName</td>
-                        <td class="text-center">@d.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
-                        <td class="text-center text-nowrap d-flex justify-content-evenly">
+                        <td>@d.Name</td>
+                        <td>@d.TemplateName</td>
+                        <td>@d.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                        <td class="text-end text-nowrap">
+                            <button class="btn @(viewingId == d.Id ? "btn-secondary" : "btn-outline-secondary") btn-sm"
+                                    @onclick="() => ToggleView(d.Id)">
+                                @(viewingId == d.Id ? "Close" : "View")
+                            </button>
                             <a class="btn btn-outline-primary btn-sm" href="/download/@d.Id/docx" download data-enhance-nav="false">Word</a>
                             <a class="btn btn-outline-primary btn-sm" href="/download/@d.Id/pdf" download data-enhance-nav="false">PDF</a>
                             <button class="btn btn-outline-secondary btn-sm" @onclick="() => ToggleShareAsync(d.Id)">Share</button>
@@ -56,6 +60,18 @@ else
                             }
                         </td>
                     </tr>
+
+                    @if (viewingId == d.Id)
+                    {
+                        <tr>
+                            <td colspan="4" class="bg-body-tertiary">
+                                <div class="p-2">
+                                    <iframe src="/view/@d.Id" title="@d.Name"
+                                            style="width:100%; height:75vh; min-height:500px; border:1px solid #dee2e6;"></iframe>
+                                </div>
+                            </td>
+                        </tr>
+                    }
 
                     @if (sharingId == d.Id)
                     {
@@ -95,10 +111,12 @@ else
                                                 <input class="form-control" readonly value="@newLink" />
                                                 <button class="btn btn-outline-success" @onclick="CopyLinkAsync">Copy</button>
                                             </div>
+
                                             <a class="btn btn-success btn-sm mt-2"
                                                href="@WhatsAppUrl(d.Name)" target="_blank" rel="noopener noreferrer">
                                                 Send via WhatsApp
                                             </a>
+
                                             @if (copyMessage is not null)
                                             {
                                                 <div class="small mt-1">@copyMessage</div>
@@ -153,6 +171,9 @@ else
     private Guid? confirmingId;
     private int userId;
 
+    // Viewing state
+    private Guid? viewingId;
+
     // Sharing state
     private Guid? sharingId;
     private List<ShareInfo> shares = [];
@@ -179,8 +200,26 @@ else
         await Documents.DeleteAsync(userId, id);   // its share links are deleted with it
         confirmingId = null;
         if (sharingId == id) CloseShare();
+        if (viewingId == id) viewingId = null;
         await LoadAsync();
     }
+
+    // ---------- View ----------
+
+    private void ToggleView(Guid id)
+    {
+        if (viewingId == id)
+        {
+            viewingId = null;
+            return;
+        }
+
+        CloseShare();         // only one panel is open at a time
+        confirmingId = null;
+        viewingId = id;
+    }
+
+    // ---------- Share ----------
 
     private async Task ToggleShareAsync(Guid id)
     {
@@ -191,6 +230,7 @@ else
         }
 
         CloseShare();
+        viewingId = null;     // only one panel is open at a time
         confirmingId = null;
         sharingId = id;
         shares = await ShareSvc.ListAsync(userId, id);
@@ -218,7 +258,6 @@ else
             return;
         }
 
-        // Nav.BaseUri is the address you are using right now, so open the app with the address your coworkers will use
         newLink = $"{Nav.BaseUri}s/{token}";
         shares = await ShareSvc.ListAsync(userId, id);
     }
@@ -240,13 +279,14 @@ else
         copyMessage = ok ? "Copied." : "Could not copy automatically. Select the link and press Ctrl+C.";
     }
 
+    // Opens WhatsApp (app or WhatsApp Web) with the message ready; the user picks the contact
+    private string WhatsAppUrl(string documentName) =>
+        "https://wa.me/?text=" + Uri.EscapeDataString($"{documentName}: {newLink}");
+
     private static string StatusClass(string status) => status switch
     {
         "Active" => "text-bg-success",
         "Expired" => "text-bg-warning",
         _ => "text-bg-secondary"
     };
-    // Opens WhatsApp (app or WhatsApp Web) with the message ready; the user picks the contact
-    private string WhatsAppUrl(string documentName) =>
-        "https://wa.me/?text=" + Uri.EscapeDataString($"{documentName}: {newLink}");
 }

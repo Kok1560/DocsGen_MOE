@@ -1,45 +1,25 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">DocGen</a>
-    </div>
-</div>
-
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
-
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-
-        @* <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div> *@
-
-        @* <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-            <i class="bi bi-files"></i>
-        </div> *@
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link d-flex align-items-center" href="templates">
-                <span class="bi bi-file-earmark-pdf-fill fs-4 d-flex align-items-center justify-content-center" aria-hidden="true"></span>
-                Templates
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="documents">
-                <span class="bi bi-folder-fill fs-4 d-flex align-items-center justify-content-center" aria-hidden="true"></span>
-                My documents
-            </NavLink>
-        </div>
-    </nav>
-</div>
-
+<AuthorizeView>
+    <Authorized>
+        <nav class="main-nav" aria-label="@L["nav.menu"]">
+            <div class="container">
+                <ul class="nav-list">
+                    <li>
+                        <NavLink class="nav-link-item" href="" Match="NavLinkMatch.All">
+                            <i class="bi bi-house-door-fill" aria-hidden="true"></i><span>@L["nav.home"]</span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="nav-link-item" href="templates">
+                            <i class="bi bi-file-earmark-text-fill" aria-hidden="true"></i><span>@L["nav.templates"]</span>
+                        </NavLink>
+                    </li>
+                    <li>
+                        <NavLink class="nav-link-item" href="documents">
+                            <i class="bi bi-folder-fill" aria-hidden="true"></i><span>@L["nav.documents"]</span>
+                        </NavLink>
+                    </li>
+                </ul>
+            </div>
+        </nav>
+    </Authorized>
+</AuthorizeView>
